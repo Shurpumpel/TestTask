@@ -52,16 +52,19 @@ import java.util.concurrent.Executors;
 import javax.crypto.Cipher;
 import javax.crypto.NoSuchPaddingException;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
     private Button button;
-    private FirstSocket socket1;
-    private SecondSocket socket2;
     private static KeyPair keyPair;
+    private boolean isSocketsWork;
+    @SuppressLint("StaticFieldLeak")
+    public static Context currentContext;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        this.isSocketsWork = false;
+        currentContext = this;
         setContentView(R.layout.activity_main);
         this.button = findViewById(R.id.button1);
 
@@ -71,51 +74,43 @@ public class MainActivity extends AppCompatActivity {
             Log.d("errors", "error in setKeys");
         }
 
+        this.button.setOnClickListener(this);
+    }
 
+    @SuppressLint("SetTextI18n")
+    @Override
+    public void onClick(View v) {
+        TextView textView = findViewById(R.id.ipText);
+        if(!isSocketsWork) {
+            try {
+                startService(new Intent(this, FirstSocket.class));
+                startService(new Intent(this, SecondSocket.class));
+                isSocketsWork = true;
 
-        this.button.setOnClickListener(new View.OnClickListener() {
-            @SuppressLint("SetTextI18n")
-            @Override
-            public void onClick(View v) {
-            if(button.getText().equals("start")) {
-                try {
-                    socket1 = new FirstSocket();
-                    socket2 = new SecondSocket(MainActivity.this);
-
-                    String text = getLocalAddress().toString()+
-                            "\nPort1: " + socket1.serverSocket.getLocalPort() +
-                            "\nPort2: " + socket2.serverSocket.getLocalPort();
-                    TextView textView = findViewById(R.id.ipText);
-                    textView.setText(text);
-                    socket1.start();
-                    socket2.start();
-
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                button.setText("stop");
-            }else {
-                try {
-                    socket1.serverSocket.close();
-                    socket2.serverSocket.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                String text = "";
-                TextView textView = findViewById(R.id.ipText);
+                String text = getLocalAddress().toString() +
+                        "\nPort1: " + FirstSocket.port+
+                        "\nPort2: " + SecondSocket.port;
                 textView.setText(text);
-                button.setText("start");
-            }
-            }
-        });
 
+            } catch (Exception e) {
+                textView.setText("Error! Try again");
+            }
+            button.setText("stop");
+        }else {
+            stopService(new Intent(this, FirstSocket.class));
+            stopService(new Intent(this, SecondSocket.class));
+            isSocketsWork = false;
+            String text = "";
+            textView.setText(text);
+            button.setText("start");
+        }
     }
 
     private void setKeys() throws NoSuchAlgorithmException, UnsupportedEncodingException, InvalidKeySpecException {
 
         SharedPreferences sharedPreferences = this.getSharedPreferences("RSAKeys", Context.MODE_PRIVATE);
 
-        if(!sharedPreferences.contains("private") && sharedPreferences.contains("public")) {
+        if(!(sharedPreferences.contains("private") && sharedPreferences.contains("public"))) {
             //Generate RSA keys
             KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
             generator.initialize(1024);
@@ -131,19 +126,19 @@ public class MainActivity extends AppCompatActivity {
         }
 
         //init keys
-            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-            //get public key from file
-            String publicK = sharedPreferences.getString("public", "");
-            byte[] keyBytes = Base64.decode(publicK.getBytes("utf-8"), Base64.DEFAULT);
-            X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
-            PublicKey publicKey = (PublicKey) keyFactory.generatePublic(spec);
-            //get private key from file
-            String privateK = sharedPreferences.getString("private", "");
-            keyBytes = Base64.decode(privateK.getBytes("utf-8"), Base64.DEFAULT);
-            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
-            PrivateKey privateKey = keyFactory.generatePrivate(keySpec);
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        //get public key from file
+        String publicK = sharedPreferences.getString("public", "");
+        byte[] keyBytes = Base64.decode(publicK.getBytes("utf-8"), Base64.DEFAULT);
+        X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
+        PublicKey publicKey = (PublicKey) keyFactory.generatePublic(spec);
+        //get private key from file
+        String privateK = sharedPreferences.getString("private", "");
+        keyBytes = Base64.decode(privateK.getBytes("utf-8"), Base64.DEFAULT);
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
+        PrivateKey privateKey = keyFactory.generatePrivate(keySpec);
 
-            keyPair = new KeyPair(publicKey, privateKey);
+        keyPair = new KeyPair(publicKey, privateKey);
 
     }
 
@@ -159,7 +154,6 @@ public class MainActivity extends AppCompatActivity {
                 Enumeration<InetAddress> addrEnum = net.getInetAddresses();
                 while (addrEnum.hasMoreElements()) {
                     InetAddress addr = addrEnum.nextElement();
-
                     if ( !addr.isLoopbackAddress() && !addr.isAnyLocalAddress()
                             && !addr.isLinkLocalAddress() && !addr.isMulticastAddress()
                     ) {
@@ -174,5 +168,6 @@ public class MainActivity extends AppCompatActivity {
     public static KeyPair getKeyPair() {
         return keyPair;
     }
+
 
 }
